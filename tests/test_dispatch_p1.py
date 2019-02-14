@@ -1,4 +1,4 @@
-from prosumpy import dispatch_max_sc, dispatch_max_sc_grid_pf
+from prosumpy import dispatch_only_meter_sc
 import numpy as np
 import pandas as pd
 
@@ -7,23 +7,25 @@ from collections import namedtuple
 
 @pytest.fixture(scope="session")
 def data():
-    Data = namedtuple('data', ['pv', 'demand', 'param_tech'])
+    Data = namedtuple('data', ['p1', 'param_tech'])
     param_tech = {'BatteryCapacity': 10,
-                 'BatteryEfficiency': .5,
-                 'InverterEfficiency': .5,
+                 'outEfficiency': .5,
+                 'inEfficiency': .5,
+                  'maxChargePower': 10,
+                  'maxDischargePower': 10,
                  'timestep': 0.25,
-                 'MaxPower': 45}
+                 }
     demand = pd.read_csv('./tests/data/demand_example.csv', index_col=0, header=None, parse_dates=True, squeeze=True)
     pv = pd.read_csv('./tests/data/pv_example.csv', index_col=0, header=None, parse_dates=True, squeeze=True)
     pv = pv * 10
     p1 = demand-pv
-    return Data(pv, demand, param_tech)
+    return Data(p1, param_tech)
 
 @pytest.fixture(scope='module',
-                params=[dispatch_max_sc, dispatch_max_sc_grid_pf], # Enter here the strategies to be tested
-                ids=['max_selfconsume', 'perfect_forecast'])
+                params=[dispatch_only_meter_sc], # Enter here the strategies to be tested
+                ids=['p1_meter'])
 def model_results(request, data):
-    return request.param(data.pv, data.demand, data.param_tech)
+    return request.param(data.p1, data.param_tech)
 
 
 # The following fucntions are tests to validate that any dispatch strategy is valid.

@@ -48,3 +48,32 @@ def plot_dispatch(pv, demand, E, week=30):
 
     return
 
+def plot_onlyGrid(p1, E, week=30):
+    """ Visualize dispatch algorithm for a specific week
+    Parameters:
+        demand (pd.Series): demand production
+        pv (pd.Series): pv production
+        E (dict):  Energy flows. Dictionary of pd.Series: res_pv, grid2load, store2inv, LevelOfCharge
+    """
+
+    sliced_index = (p1.index.week==week)
+    p1_sliced = p1[sliced_index]
+    gridPow_sliced = E['gridPower'][sliced_index]
+    LevelOfCharge = E['LevelOfCharge'][sliced_index]
+
+
+
+    fig, axes = plt.subplots(nrows=3, ncols=1, sharex=True, figsize=(17, 4*3), frameon=False,
+                             gridspec_kw={'height_ratios': [3, 1, 1], 'hspace': 0.04})
+
+    #fig, ax = plt.subplots(figsize=(17, 4))
+    axes[0].plot(p1_sliced.index, p1_sliced, color='black', lw=2)
+    axes[0].set_ylabel('Power (kW)')
+
+    axes[1].fill_between(LevelOfCharge.index, 0, LevelOfCharge, color='grey', alpha=.2)
+    axes[1].set_ylabel('State of Charge (kWh)')
+
+    axes[2].fill_between(gridPow_sliced.index, 0, gridPow_sliced, color='green', alpha=.2)
+    axes[2].set_ylabel('In/out from grid (kW)')
+
+    return

@@ -104,6 +104,83 @@ def dispatch_max_sc(pv, demand, param, return_series=False):
         out = out_pd
     return out
 
+def dispatch_only_meter_sc(p1, param, return_series=False):
+    """ Self consumption maximization pv + battery dispatch algorithm.
+    The dispatch of the storage capacity is performed in such a way to maximize self-consumption:
+    the battery is charged when the PV power is higher than the load and as long as it is not fully charged.
+    It is discharged as soon as the PV power is lower than the load and as long as it is not fully discharged.
+
+    Arguments:
+        pv (pd.Series): Vector of PV generation, in kW DC (i.e. before the inverter)
+        demand (pd.Series): Vector of household consumption, kW
+        param (dict): Dictionary with the simulation parameters:
+                timestep (float): Simulation time step (in hours)
+                BatteryCapacity: Available battery capacity (i.e. only the the available DOD), kWh
+                BatteryEfficiency: Battery round-trip efficiency, -
+                InverterEfficiency: Inverter efficiency, -
+                MaxPower: Maximum battery charging or discharging powers (assumed to be equal), kW
+        return_series(bool): if True then the return will be a dictionary of series. Otherwise it will be a dictionary of ndarrays.
+                        It is reccommended to return ndarrays if speed is an issue (e.g. for batch runs).
+    Returns:
+        dict: Dictionary of Time series
+
+    """
+
+    bat_size_e_adj = param['BatteryCapacity']
+    bat_size_pin_adj = param['maxChargePower']
+    bat_size_pout_adj = param['maxDischargePower']
+    n_in = param['inEfficiency']
+    n_out = param['outEfficiency']
+    timestep = param['timestep']
+    # We work with np.ndarrays as they are much faster than pd.Series
+    Nsteps = len(p1)
+    LevelOfCharge = np.zeros(Nsteps)
+    store2Grid = np.zeros(Nsteps)
+    grid2Store = np.zeros(Nsteps)
+    gridOutNoSto = np.maximum(0,p1.values) #AC, no losses
+    gridInNoSto = np.abs(np.minimum(0,p1.values)) #AC, no losses
+    gridPower = np.zeros(Nsteps)
+
+    #first timestep = 0
+    LevelOfCharge[0] =   bat_size_e_adj / 2  # DC
+
+    for i in range(1,Nsteps):
+        #grid to storage
+        if LevelOfCharge[i-1] >= bat_size_e_adj:  # if battery is full
+            pass
+        else: #if battery is not full
+            if LevelOfCharge[i-1] +  gridOutNoSto[i] * n_in * timestep > bat_size_e_adj:  # if battery will be full after putting excess
+                grid2Store[i] = min((bat_size_e_adj - LevelOfCharge[i-1]) / timestep, bat_size_pin_adj)
+            else:
+                grid2Store[i] = min(gridOutNoSto[i], bat_size_pin_adj)
+
+        #Storage to load
+        store2Grid[i] = min(bat_size_pout_adj,  # DC
+                           gridInNoSto[i],
+                            (LevelOfCharge[i-1] / timestep)*n_out)
+
+        #SOC
+        LevelOfCharge[i] = min(LevelOfCharge[i-1] - (store2Grid[i]/n_out -  grid2Store[i]*n_in) * timestep,  # DC
+                               bat_size_e_adj)
+
+    #MaxDischarge = np.minimum(LevelOfCharge[i-1]*BatteryEfficiency/timestep,MaxPower)
+    gridPower = -store2Grid + grid2Store - gridOutNoSto + gridInNoSto
+
+    #Potential Grid to storage  # TODO: not an option for now in this strategy
+    # GridPurchase = False
+
+    out = {'grid2Store': grid2Store,
+            'store2Grid': store2Grid,
+            'LevelOfCharge': LevelOfCharge,
+            'gridPower': gridPower
+            }
+    if not return_series:
+        out_pd = {}
+        for k, v in out.items():  # Create dictionary of pandas series with same index as the input pv
+            out_pd[k] = pd.Series(v, index=p1.index)
+        out = out_pd
+    return out
+
 
 
 def dispatch_max_sc_grid_pf(pv, demand, param_tech, return_series=False):
